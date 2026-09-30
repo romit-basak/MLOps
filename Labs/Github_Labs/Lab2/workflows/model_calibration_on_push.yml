@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main  # Trigger the workflow on pushes to the main branch
+    paths:  # ...but only when Lab 2 code or this workflow changes
+      - 'Labs/Github_Labs/Lab2/src/**'
+      - 'Labs/Github_Labs/Lab2/requirements.txt'
+      - '.github/workflows/github_lab2_model_calibration_on_push.yml'
+
+permissions:
+  contents: write  # GITHUB_TOKEN is read-only by default; needed for the final git push
 
 jobs:
   retrain:
@@ -14,9 +21,9 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.9
+        python-version: '3.12'
 
     - name: Install dependencies
       run: pip install -r Labs/Github_Labs/Lab2/requirements.txt
@@ -53,14 +60,15 @@ jobs:
 
     - name: Commit and Push Changes
       run: |
-        git config --global user.email "26876927+raminmohammadi@users.noreply.github.com"
-        git config --global user.name "raminmohammadi"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
         metrics_filename="Labs/Github_Labs/Lab2/metrics/${timestamp}_metrics.json"
         model_filename="Labs/Github_Labs/Lab2/models/model_${timestamp}_dt_model.joblib"
         git add -f "$metrics_filename" "$model_filename"
         # Commit only if there are changes
         if ! git diff --cached --quiet; then
           git commit -m "Add metrics and updated model for $timestamp"
+          git pull --rebase origin main  # main may have moved while we trained
           git push
         else
           echo "No changes to commit."

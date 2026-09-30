@@ -1,8 +1,9 @@
 # from sklearn.datasets import fetch_rcv1
-import mlflow, datetime, os, pickle, random
+import mlflow, datetime, os, pickle
 # import sklearn
 from joblib import dump
-from sklearn.datasets import make_classification
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score
 import sys
 from sklearn.ensemble import RandomForestClassifier
@@ -23,33 +24,29 @@ if __name__ == '__main__':
     # Use the timestamp in your script
     print(f"Timestamp received from GitHub Actions: {timestamp}")
     
-    # Check if the file exists within the folder
-    X, y = make_classification(
-                            n_samples=random.randint(0, 2000),
-                            n_features=6,
-                            n_informative=3,
-                            n_redundant=0,
-                            n_repeated=0,
-                            n_classes=2,
-                            random_state=0,
-                            shuffle=True,
-                        )
-    if os.path.exists('data'): 
-        with open('data/data.pickle', 'wb') as data:
-            pickle.dump(X, data)
-            
-        with open('data/target.pickle', 'wb') as data:
-            pickle.dump(y, data)  
-    else:
-        os.makedirs('data/')
-        with open('data/data.pickle', 'wb') as data:
-            pickle.dump(X, data)
-            
-        with open('data/target.pickle', 'wb') as data:
-            pickle.dump(y, data)  
-            
-    mlflow.set_tracking_uri("./mlruns")
-    dataset_name = "Reuters Corpus Volume"
+    # Wisconsin Diagnostic Breast Cancer: 569 tumours, 30 numeric features.
+    # sklearn encodes the target as 0 = malignant, 1 = benign.
+    X, y = load_breast_cancer(return_X_y=True)
+
+    # f1_score() scores label 1 by default, and missing a malignant tumour is the costly error
+    y = 1 - y  # flip labels so that malignant = 1, benign = 0
+
+    os.makedirs('data', exist_ok=True)
+
+    # Hold out a stratified test set; evaluate_model.py loads data/X_test.pickle and data/y_test.pickle
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y, random_state=42)
+    with open('data/X_test.pickle', 'wb') as f:
+        pickle.dump(X_test, f)
+    with open('data/y_test.pickle', 'wb') as f:
+        pickle.dump(y_test, f)
+    with open('data/X_train.pickle', 'wb') as f:
+        pickle.dump(X_train, f)
+    with open('data/y_train.pickle', 'wb') as f:
+        pickle.dump(y_train, f)
+
+
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    dataset_name = "Breast Cancer Wisconsin"
     current_time = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
     experiment_name = f"{dataset_name}_{current_time}"    
     experiment_id = mlflow.create_experiment(f"{experiment_name}")
@@ -59,18 +56,18 @@ if __name__ == '__main__':
         
         params = {
                     "dataset_name": dataset_name,
-                    "number of datapoint": X.shape[0],
-                    "number of dimensions": X.shape[1]}
-        
+                    "number of datapoint": X_train.shape[0],
+                    "number of dimensions": X_train.shape[1]}
+
         mlflow.log_params(params)
-            
-        
+
+
         forest = RandomForestClassifier(random_state=0)
-        forest.fit(X, y)
-        
-        y_predict = forest.predict(X)
-        mlflow.log_metrics({'Accuracy': accuracy_score(y, y_predict),
-                            'F1 Score': f1_score(y, y_predict)})
+        forest.fit(X_train, y_train)
+
+        y_predict = forest.predict(X_train)
+        mlflow.log_metrics({'Train Accuracy': accuracy_score(y_train, y_predict),
+                            'Train F1 Score': f1_score(y_train, y_predict)})
         
         if not os.path.exists('models/'): 
             # then create it.

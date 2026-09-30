@@ -1,8 +1,7 @@
-import pickle, os, json, random
+import pickle, os, json
 from sklearn.metrics import f1_score
 import joblib, glob, sys
 import argparse
-from sklearn.datasets import make_classification
 
 sys.path.insert(0, os.path.abspath('..'))
 
@@ -20,19 +19,13 @@ if __name__=='__main__':
         raise ValueError('Failed to catching the latest model')
         
     try:
-        # Check if the file exists within the folder
-        X, y = make_classification(
-                            n_samples=random.randint(0, 2000),
-                            n_features=6,
-                            n_informative=3,
-                            n_redundant=0,
-                            n_repeated=0,
-                            n_classes=2,
-                            random_state=0,
-                            shuffle=True,
-                        )
-    except:
-        raise ValueError('Failed to catching the data')
+        # Held-out split written by train_model.py earlier in the same job
+        with open('data/X_test.pickle', 'rb') as f:
+            X = pickle.load(f)
+        with open('data/y_test.pickle', 'rb') as f:
+            y = pickle.load(f)
+    except FileNotFoundError as e:
+        raise ValueError('Failed to load the held-out test set; run train_model.py first') from e
     
     y_predict = model.predict(X)
     metrics = {"F1_Score":f1_score(y, y_predict)}

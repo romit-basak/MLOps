@@ -4,6 +4,49 @@ This repository demonstrates how to use GitHub Actions to automate the process o
 
 Watch the tutorial video for this lab at [Github action Lab2](https://youtu.be/cj5sXIMZUjQ)
 
+## My Changes
+
+### Dataset: Breast Cancer Wisconsin (replaces synthetic data)
+- `train_model.py` now loads scikit-learn's bundled [Breast Cancer Wisconsin (Diagnostic)](https://scikit-learn.org/stable/datasets/toy_dataset.html#breast-cancer-dataset) dataset: 569 tumours, 30 numeric features, 212 malignant / 357 benign. It ships with scikit-learn, so the CI runner needs no download.
+- **Positive class = malignant.** scikit-learn encodes `0 = malignant, 1 = benign`, and `f1_score` scores label `1` by default. The labels are flipped (`y = 1 - y`) right after loading, so every metric reports how well the model catches malignant tumours, which is the error that matters most in screening.
+
+### Evaluation: proper hold-out test set
+- **Problem in the original:** `evaluate_model.py` generated "new" data with `make_classification` at a different `n_samples`. Its random stream depends on `n_samples`, so the column order and cluster covariances came out different. The model was scored on a *different distribution* (F1 ≈ 0.54, i.e. noise). When the two sample sizes happened to match, the evaluation data was identical to the training data (F1 ≈ 1.0).
+- **Fix:** `train_model.py` makes a stratified 70/30 split (`random_state=42`) and pickles it to `data/`. `evaluate_model.py` loads `data/X_test.pickle` and `data/y_test.pickle`. Both scripts run in the same job, so the files are still there for the evaluation step.
+- MLflow now logs training metrics as `Train Accuracy` / `Train F1 Score`, so they aren't mistaken for test metrics.
+
+**Result** (local run, 171 held-out tumours, 64 malignant):
+
+| Metric | Value |
+|---|---|
+| F1 (malignant) | 0.951 |
+| Malignant recall | 0.906 |
+| Missed malignant (false negatives) | 6 |
+| False alarms (false positives) | 0 |
+
+### Pipeline and workflow fixes
+| Issue | Fix |
+|---|---|
+| Unpinned `mlflow` resolves to 3.x on modern Python, which rejects the `./mlruns` file store and crashes training | Tracking URI set to `sqlite:///mlflow.db`; all versions pinned in `requirements.txt` |
+| Python 3.9 is end-of-life | CI uses Python `'3.12'` (quoted: unquoted `3.10` would be read by YAML as `3.1`) with `actions/setup-python@v5` |
+| `GITHUB_TOKEN` is read-only by default, so the final `git push` fails with 403 | Added `permissions: contents: write` |
+| Automated commits were attributed to the instructor's account | Commits as `github-actions[bot]` |
+| Workflow retrained on every push to `main`, even for unrelated labs | `paths:` filter limits it to Lab 2 source, requirements, and the workflow file |
+| Push rejected if `main` moved during training | `git pull --rebase origin main` before `git push` |
+
+The workflow that actually runs is `.github/workflows/github_lab2_model_calibration_on_push.yml`. The copy in `Labs/Github_Labs/Lab2/workflows/` is kept identical for reference.
+
+### Running locally
+```bash
+conda create -n mlops-lab2 python=3.12 -y && conda activate mlops-lab2
+pip install -r Labs/Github_Labs/Lab2/requirements.txt
+ts=$(date '+%Y%m%d%H%M%S')
+python Labs/Github_Labs/Lab2/src/train_model.py --timestamp "$ts"
+python Labs/Github_Labs/Lab2/src/evaluate_model.py --timestamp "$ts"
+cat "${ts}_metrics.json"
+```
+Run from the repo root, as CI does. The artifacts it creates (`data/`, `mlflow.db`, the model file) are gitignored.
+
 
 ## Prerequisites
 
@@ -26,7 +69,7 @@ Watch the tutorial video for this lab at [Github action Lab2](https://youtu.be/c
 
 # Running the Workflow
 ## Customize Model Training
-1. Modify the `train_model.py` script in the `src/` directory according to your dataset and model requirements. This script generates synthetic data for demonstration purposes.
+1. Modify the `train_model.py` script in the `src/` directory according to your dataset and model requirements. The original script generated synthetic data for demonstration purposes; this version uses the Breast Cancer Wisconsin dataset (see [My Changes](#my-changes)).
 
 ## Push Your Changes:
 1. Commit your changes and push them to your forked repository.

@@ -183,3 +183,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .DS_Store
+# Github Lab 2: artifacts from running the pipeline locally from repo root
+mlflow.db
+timestamp.txt
+/data/
+/model_*_dt_model.joblib

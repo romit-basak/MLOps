@@ -1,4 +1,8 @@
+import json
+import os
+
 from flask import Flask, request, jsonify, render_template
+import joblib
 import tensorflow as tf
 import numpy as np
 
@@ -9,6 +13,10 @@ api_url = 'http://0.0.0.0:4000/predict'  # Update with the actual URL
 
 # Load the TensorFlow model
 model = tf.keras.models.load_model('my_model.keras')  # Replace 'my_model.keras' with the actual model file
+# Scaler fitted during training; inputs must be standardized the same way
+scaler = joblib.load('scaler.joblib')
+with open('metrics.json') as f:
+    print(f"Loaded model with test accuracy {json.load(f)['test_accuracy']:.4f}")
 class_labels = ['Setosa', 'Versicolor', 'Virginica']
 
 
@@ -28,7 +36,7 @@ def predict():
 
             # Perform the prediction
             input_data = np.array([sepal_length, sepal_width, petal_length, petal_width])[np.newaxis, ]
-            prediction = model.predict(input_data)
+            prediction = model.predict(scaler.transform(input_data))
             predicted_class = class_labels[np.argmax(prediction)]
 
             # Return the predicted class in the response
@@ -42,4 +50,5 @@ def predict():
         return "Unsupported HTTP method"
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=4000)
+    # Must match EXPOSE in the dockerfile and the port mapping in docker-compose.yml
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 4000)))

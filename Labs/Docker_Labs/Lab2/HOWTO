@@ -1,2 +1,2 @@
 docker build -t app .
-docker run app
+docker run -p 4000:4000 app

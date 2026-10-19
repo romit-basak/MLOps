@@ -3,11 +3,16 @@ FROM python:3.10 AS model_training
 
 WORKDIR /app
 
-COPY src/model_training.py /app/
+# Dependencies first, so editing the training script doesn't redo pip install
 COPY requirements.txt /app/
-
 RUN pip install -r requirements.txt
-RUN python model_training.py
+
+COPY src/model_training.py /app/
+
+# Quality gate: training exits non-zero below this accuracy, which fails the build.
+# Override with: docker build --build-arg MIN_ACCURACY=0.95 -t app .
+ARG MIN_ACCURACY=0.9
+RUN MIN_ACCURACY=${MIN_ACCURACY} python model_training.py
 
 
 # Stage 2: Serve Predictions
@@ -15,7 +20,8 @@ FROM python:3.10 AS serving
 
 WORKDIR /app
 
-COPY --from=model_training /app/my_model.keras /app/
+# Everything the server needs from training: model, fitted scaler, and metrics
+COPY --from=model_training /app/my_model.keras /app/scaler.joblib /app/metrics.json /app/
 COPY src/main.py /app/
 COPY requirements.txt /app/
 
@@ -24,7 +30,8 @@ RUN pip install --trusted-host pypi.python.org -r requirements.txt
 COPY src/templates /app/templates
 COPY src/statics /app/statics
 
-EXPOSE 80
-# Docker "exposes" port 80 because it is the standard, well-known port for the HTTP (web) protocol
+# Flask listens on PORT (4000); publish it with -p 4000:4000
+ENV PORT=4000
+EXPOSE 4000
 
 CMD ["python", "main.py"]

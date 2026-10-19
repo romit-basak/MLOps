@@ -4,36 +4,42 @@ services:
     image: python:3.10-slim
     container_name: ml_trainer
     working_dir: /app
+    environment:
+      - MIN_ACCURACY=${MIN_ACCURACY:-0.9}   # Accuracy gate; override with MIN_ACCURACY=0.99 docker compose up
     volumes:
       - ./src:/app/src
       - ./requirements.txt:/app/requirements.txt
       - model_exchange:/exchange   # Shared volume mount
-    # Run training -> Copy result to shared folder
+    # Run training -> Copy model, scaler and metrics to shared folder.
+    # If the accuracy gate fails, the && chain stops and nothing is copied.
     command: >
       sh -c "pip install -r requirements.txt &&
              python src/model_training.py &&
-             cp my_model.keras /exchange/my_model.keras"
+             cp my_model.keras scaler.joblib metrics.json /exchange/"
 
   # Service 2: Serve the model
   serving:
     image: python:3.10-slim
     container_name: ml_serving
     working_dir: /app
+    environment:
+      - PORT=4000
     ports:
-      - "80:80"
+      - "4000:4000"   # host:container, must match PORT
     volumes:
       - ./src:/app/src
       - ./requirements.txt:/app/requirements.txt
       - ./src/templates:/app/templates
       - ./src/statics:/app/statics
       - model_exchange:/exchange   # Shared volume mount
+    # Starts only if training exited 0, i.e. the model passed the accuracy gate
     depends_on:
       model-training:
         condition: service_completed_successfully
-    # Copy result FROM shared folder -> Run server
+    # Copy results FROM shared folder -> Run server
     command: >
       sh -c "pip install --trusted-host pypi.python.org -r requirements.txt &&
-             cp /exchange/my_model.keras ./my_model.keras &&
+             cp /exchange/my_model.keras /exchange/scaler.joblib /exchange/metrics.json ./ &&
              python src/main.py"
 
 volumes:
